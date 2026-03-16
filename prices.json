@@ -1,0 +1,6 @@
+[
+  {"start": "2026-04-01T00:00:00", "price": 0.10, "duration_hours": 4},
+  {"start": "2026-04-01T04:00:00", "price": 0.15, "duration_hours": 4},
+  {"start": "2026-04-01T08:00:00", "price": 0.25, "duration_hours": 4},
+  {"start": "2026-04-01T12:00:00", "price": 0.12, "duration_hours": 4}
+]
