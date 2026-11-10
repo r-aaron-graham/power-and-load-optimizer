@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+import math
 from typing import Dict, List, Tuple
 
 import click
@@ -12,6 +13,8 @@ import click
 
 class Task:
     def __init__(self, task_id: str, duration_hours: float, deadline: str) -> None:
+        if not math.isfinite(duration_hours) or duration_hours <= 0:
+            raise ValueError("Task duration must be finite and positive")
         self.task_id = task_id
         self.duration = timedelta(hours=duration_hours)
         self.deadline = datetime.fromisoformat(deadline)
@@ -29,7 +32,7 @@ def load_tasks(path: Path) -> List[Task]:
     return tasks
 
 
-def load_prices(path: Path) -> List[Tuple[datetime, float]]:
+def load_prices(path: Path) -> List[Tuple[datetime, float, timedelta]]:
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     # Each entry: {"start": iso_datetime, "price": float, "duration_hours": float}
@@ -47,19 +50,20 @@ def load_prices(path: Path) -> List[Tuple[datetime, float]]:
 def schedule_tasks(tasks: List[Task], prices: List[Tuple[datetime, float, timedelta]]) -> Dict[str, Tuple[datetime, datetime]]:
     schedule: Dict[str, Tuple[datetime, datetime]] = {}
     for task in tasks:
+        if task.task_id in schedule:
+            raise ValueError(f"Duplicate task ID: {task.task_id}")
         scheduled = False
         for slot_start, price, slot_duration in prices:
             slot_end = slot_start + slot_duration
-            if slot_start + task.duration <= slot_end and slot_end <= task.deadline:
-                # Ensure no overlap with existing scheduled tasks
-                conflict = False
-                for _, (s, e) in schedule.items():
-                    if not (slot_start >= e or slot_start + task.duration <= s):
-                        conflict = True
-                        break
-                if conflict:
-                    continue
-                schedule[task.task_id] = (slot_start, slot_start + task.duration)
+            candidate_start = slot_start
+            for start, end in sorted(schedule.values()):
+                if candidate_start + task.duration <= start:
+                    break
+                if candidate_start < end:
+                    candidate_start = end
+            candidate_end = candidate_start + task.duration
+            if candidate_end <= min(slot_end, task.deadline):
+                schedule[task.task_id] = (candidate_start, candidate_end)
                 scheduled = True
                 break
         if not scheduled:
@@ -78,7 +82,10 @@ def schedule_tasks(tasks: List[Task], prices: List[Tuple[datetime, float, timede
 def main(tasks: Path, prices: Path, output: Path):
     tasks_list = load_tasks(tasks)
     prices_list = load_prices(prices)
-    schedule = schedule_tasks(tasks_list, prices_list)
+    try:
+        schedule = schedule_tasks(tasks_list, prices_list)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     # Serialize schedule to JSON
     result = []
     for task_id, (start, end) in schedule.items():
