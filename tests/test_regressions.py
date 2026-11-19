@@ -15,3 +15,20 @@ class SchedulerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Duplicate"):
             schedule_tasks([Task("a", 1, "2026-04-01T04:00:00")] * 2,
                            [(start, 0.1, timedelta(hours=4))])
+
+
+    def test_unsorted_slots_use_cheapest_feasible_interval(self):
+        start = datetime.fromisoformat("2026-04-01T00:00:00")
+        later = start + timedelta(hours=1)
+        task = Task("a", 1, "2026-04-01T02:00:00")
+        slots = [(start, 0.30, timedelta(hours=1)), (later, -0.10, timedelta(hours=1))]
+        self.assertEqual(schedule_tasks([task], slots)["a"][0], later)
+
+    def test_invalid_prices_and_mixed_timestamps_are_rejected(self):
+        task = Task("a", 1, "2026-04-01T02:00:00")
+        start = datetime.fromisoformat("2026-04-01T00:00:00")
+        with self.assertRaisesRegex(ValueError, "finite price"):
+            schedule_tasks([task], [(start, float("nan"), timedelta(hours=1))])
+        aware = datetime.fromisoformat("2026-04-01T00:00:00+00:00")
+        with self.assertRaisesRegex(ValueError, "timezone offsets"):
+            schedule_tasks([task], [(aware, 0.10, timedelta(hours=1))])
